@@ -2,12 +2,17 @@ package com.example.opencvtest
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Bitmap.Config.RGB_565
 import android.graphics.ImageFormat
 import android.net.Uri
 import android.os.Bundle
+import android.renderscript.Allocation
+import android.renderscript.Element
+import android.renderscript.RenderScript
+import android.renderscript.ScriptIntrinsicBlur
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -23,14 +28,8 @@ import androidx.core.content.ContextCompat
 import com.example.opencvtest.databinding.ActivityMainBinding
 import org.opencv.android.OpenCVLoader
 import org.opencv.android.Utils
-import org.opencv.core.Core
-import org.opencv.core.CvType
 import org.opencv.core.Mat
-import org.opencv.core.MatOfInt
-import org.opencv.core.MatOfPoint
-import org.opencv.core.MatOfPoint2f
 import org.opencv.core.Point
-import org.opencv.core.Rect
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 import org.opencv.utils.Converters
@@ -74,6 +73,8 @@ open class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+
+
         init()
     }
 
@@ -112,7 +113,7 @@ open class MainActivity : AppCompatActivity() {
             imageCapture = getImageCapture()
 
             // Select back camera as a default (use case)
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+            val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
 
             // image analyzer (use case)
             val imageAnalyzer = getImageAnalyzer()
@@ -173,11 +174,13 @@ open class MainActivity : AppCompatActivity() {
 
                     val transFormedImage = prespectiveCorrectD42(bitmap!!)
 
-                    bitmap.recycle()
+//                    bitmap.recycle()
 
                     runOnUiThread {
 
-//                        binding.ivBitmap.setImageBitmap(transFormedImage)
+                        binding.ivBitmap.setImageBitmap(transFormedImage)
+                        val blurredBitmap = blur(this, bitmap!!)
+                        binding.blurBitmap.setImageBitmap(blurredBitmap)
 
                         imageProxy.close()
                     }
@@ -186,6 +189,23 @@ open class MainActivity : AppCompatActivity() {
 
             }
     }
+
+    open fun blur(context: Context?, image: Bitmap): Bitmap? {
+        val width = Math.round(image.width * 1f).toInt()
+        val height = Math.round(image.height * 1f).toInt()
+        val inputBitmap = Bitmap.createScaledBitmap(image, width, height, false)
+        val outputBitmap = Bitmap.createBitmap(inputBitmap)
+        val rs = RenderScript.create(context)
+        val intrinsicBlur = ScriptIntrinsicBlur.create(rs, Element.U8_4(rs))
+        val tmpIn = Allocation.createFromBitmap(rs, inputBitmap)
+        val tmpOut = Allocation.createFromBitmap(rs, outputBitmap)
+        intrinsicBlur.setRadius(25f)
+        intrinsicBlur.setInput(tmpIn)
+        intrinsicBlur.forEach(tmpOut)
+        tmpOut.copyTo(outputBitmap)
+        return outputBitmap
+    }
+
 
     private fun takePhoto() {
 
@@ -298,21 +318,20 @@ open class MainActivity : AppCompatActivity() {
 
         Utils.bitmapToMat(bmp, inputMat)
 
-        //check resolution 16:9 and others
-        //check aspect ratio
-        Log.d("adaffsfff", "asdasasasas: ${inputMat.cols().toDouble()}  ${inputMat.cols().toDouble()}")
-
         val inputSize = Size(inputMat.cols().toDouble(), inputMat.rows().toDouble())
         val outputSize = Size(0.0, 0.0)
-        val mappingSize = Size(34.8, 28.0)
+        //val mappingSize = Size(1280.0, 800.0)
+        val mappingSize = Size(4.0, 3.0)
+         //val mappingSize = Size(16.0, 9.0)
         val ptsObject: MutableList<Point> = ArrayList()
         val ptsTarget: MutableList<Point> = ArrayList()
-        val ratio_w = inputMat.cols().toDouble() / 1280.0
-        val ratio_h = inputMat.rows().toDouble() / 720.0
-        ptsObject.add(Point(1250.0 * ratio_w, 720.0 * ratio_h))
-        ptsObject.add(Point(0.0 * ratio_w, 720.0 * ratio_h))
-        ptsObject.add(Point(350.0 * ratio_w, 0.0 * ratio_h))
-        ptsObject.add(Point(958.0 * ratio_w, 0.0 * ratio_h))
+        val ratio_w = inputMat.cols().toDouble() / 1200.0
+        val ratio_h = inputMat.rows().toDouble() / 1600.0
+
+        ptsObject.add(Point(1100.0 * ratio_w, 1400.0 * ratio_h))
+        ptsObject.add(Point(50.0 * ratio_w, 1400.0 * ratio_h))
+        ptsObject.add(Point(300.0 * ratio_w, 200.0 * ratio_h))
+        ptsObject.add(Point(850.0 * ratio_w, 200.0 * ratio_h))
         if (inputSize.width.toFloat() / inputSize.height.toFloat() > mappingSize.width / mappingSize.height) {
             outputSize.width = inputSize.width
             outputSize.height = (inputSize.width * (mappingSize.width.toFloat() / mappingSize.height.toFloat()))
@@ -320,8 +339,8 @@ open class MainActivity : AppCompatActivity() {
             outputSize.width = inputSize.height * (mappingSize.width.toFloat() / mappingSize.height.toFloat())
             outputSize.height = inputSize.height
         }
-//        outputSize.width = 1920.0
-//        outputSize.height = 1920.0
+//        outputSize.width = inputSize.height * (mappingSize.height / mappingSize.width)
+//        outputSize.height = inputSize.height
 
         ptsTarget.add(Point(0.0, 0.0))
         ptsTarget.add(Point(outputSize.width, 0.0))
@@ -333,13 +352,12 @@ open class MainActivity : AppCompatActivity() {
         val transform = Imgproc.getPerspectiveTransform(srcMat, dstMat)
         Imgproc.warpPerspective(inputMat, outputMat, transform, outputSize)
 
-        Log.d("resoulution", " ${outputSize.width.toInt()}, ${outputSize.height.toInt()}")
+//        Log.d("resoulution", " ${outputSize.width.toInt()}, ${outputSize.height.toInt()}")
 
         val outputBmp = Bitmap.createBitmap(outputSize.width.toInt(), outputSize.height.toInt(), RGB_565)
         Utils.matToBitmap(outputMat, outputBmp)
         return outputBmp
     }
-
 
 }
 

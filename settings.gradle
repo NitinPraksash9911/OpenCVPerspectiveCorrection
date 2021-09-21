@@ -1,3 +1,5 @@
 rootProject.name = "OpenCvTest"
 include ':app'
-include ':openCVLibrary3415'
+
+include ':opencv'
+include ':opencv'
